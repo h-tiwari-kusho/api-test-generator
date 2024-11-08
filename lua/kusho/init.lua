@@ -12,8 +12,8 @@ local function open_window()
 	buf = api.nvim_create_buf(false, true)
 	local border_buf = api.nvim_create_buf(false, true)
 
-	api.nvim_buf_set_option(buf, "bufhidden", "wipe")
 	api.nvim_buf_set_option(buf, "filetype", "kusho")
+	api.nvim_buf_set_option(buf, "bufhidden", "wipe")
 
 	local width = api.nvim_get_option("columns")
 	local height = api.nvim_get_option("lines")
