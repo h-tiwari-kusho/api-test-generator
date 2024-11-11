@@ -57,7 +57,7 @@ function M.find_test_suites(opts)
 
 	pickers
 		.new(opts, {
-			prompt_title = "Kusho Test Cases",
+			prompt_title = "Kusho Test Suites",
 			finder = finders.new_table({
 				results = results,
 				entry_maker = function(entry)
@@ -87,13 +87,13 @@ function M.find_test_suites(opts)
 					end
 				end)
 
-				-- Use mapping from config
-				local copy_mapping = require("kusho").config.telescope.mappings.copy_to_clipboard
-				vim.keymap.set("i", copy_mapping, function()
-					local selection = action_state.get_selected_entry()
-					vim.fn.setreg("+", selection.full_request)
-					print("Copied request to clipboard!")
-				end, { buffer = prompt_bufnr })
+				-- -- Use mapping from config
+				-- local copy_mapping = require("kusho").config.telescope.mappings.copy_to_clipboard
+				-- vim.keymap.set("i", copy_mapping, function()
+				-- 	local selection = action_state.get_selected_entry()
+				-- 	vim.fn.setreg("+", selection.full_request)
+				-- 	print("Copied request to clipboard!")
+				-- end, { buffer = prompt_bufnr })
 
 				return true
 			end,
@@ -102,10 +102,4 @@ function M.find_test_suites(opts)
 end
 
 -- Register the extension
-return telescope.register_extension({
-	exports = {
-		test_cases = M.find_test_suites,
-	},
-})
-
--- return M
+return M

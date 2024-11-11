@@ -14,6 +14,8 @@ local log = require("plenary.log").new({
 
 function M.setup(opts)
 	config.setup(opts)
+	local machine_id = require("kusho.machine_id").get_machine_id()
+	log.debug("Machine ID: " .. machine_id)
 
 	-- Update log configuration
 	-- if M.config.log then
@@ -31,10 +33,7 @@ function M.setup(opts)
 
 	require("kusho.utils").ensure_directory(config.options.api.save_directory)
 
-	local ok, telescope = pcall(require, "telescope")
-	if ok then
-		telescope.load_extension("kusho")
-	end
+	require("telescope").load_extension("kusho")
 
 	log.info("Kusho plugin initialized")
 end

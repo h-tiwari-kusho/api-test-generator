@@ -16,10 +16,6 @@ function M.setup()
 		desc = "Show Kusho version",
 	})
 
-	vim.api.nvim_create_user_command("KushoOpenLatest", function()
-		require("kusho.utils").open_latest_test_cases()
-	end, {})
-
 	vim.api.nvim_create_user_command("KushoRunRequest", function()
 		api.run_current_request()
 	end, {})
