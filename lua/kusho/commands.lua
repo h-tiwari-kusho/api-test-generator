@@ -23,6 +23,11 @@ function M.setup()
 	vim.api.nvim_create_user_command("KushoRunRequest", function()
 		api.run_current_request()
 	end, {})
+
+	vim.api.nvim_create_user_command("KushoLogRequests", function()
+		utils.get_all_original_requests()
+	end, {})
+
 	-- Logs and utility commands.
 	--
 	-- Command to view logs

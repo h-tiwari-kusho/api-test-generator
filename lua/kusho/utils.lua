@@ -122,4 +122,64 @@ function M.hash_request(request)
 	return string.format("%08x", hash)
 end
 
+-- Utility function to get all test suite directories
+local function get_test_directories(root_path)
+	local test_dirs = {}
+	local scan = require("plenary.scandir")
+
+	scan.scan_dir(root_path, {
+		hidden = false,
+		add_dirs = false,
+		respect_gitignore = true,
+		depth = 2, -- We only need to go 2 levels deep
+		search_pattern = "test_cases%.http$",
+		on_insert = function(entry)
+			table.insert(test_dirs, entry)
+		end,
+	})
+
+	return test_dirs
+end
+
+-- Function to extract original request from a file
+local function extract_original_request(file_path)
+	local file = io.open(file_path, "r")
+	if not file then
+		return nil
+	end
+
+	local content = file:read("*all")
+	file:close()
+
+	-- Find the section after ### Original Request ###
+	local pattern = "### Original Request ###\n(.-)###"
+	local original_request = content:match(pattern)
+
+	if original_request then
+		-- Trim whitespace
+		return original_request:gsub("^%s*(.-)%s*$", "%1")
+	end
+
+	return nil
+end
+
+-- Function to get all original requests from test suites
+function M.get_all_original_requests()
+	local results = {}
+
+	local test_files = get_test_directories(config.options.api.save_directory)
+
+	for _, file_path in ipairs(test_files) do
+		local request = extract_original_request(file_path)
+		if request then
+			-- Use the parent directory name as the key
+			local parent_dir = vim.fn.fnamemodify(file_path, ":h:t")
+			results[parent_dir] = request
+		end
+	end
+
+	log.debug("ALLDIRS", vim.inspect(results))
+	return results
+end
+
 return M
