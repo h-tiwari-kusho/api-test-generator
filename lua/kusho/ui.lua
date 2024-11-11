@@ -6,6 +6,7 @@ local log = require("kusho").log
 function M.format_request_details(request)
 	local lines = {
 		"HTTP Request Details",
+
 		"==================",
 		string.format("Method: %s", request.method or "N/A"),
 		string.format("URL: %s", request.url or "N/A"),
@@ -49,6 +50,87 @@ function M.display_request(request)
 	-- Format and set content
 	local lines = M.format_request_details(request)
 	view.set_buffer_content(buf, lines)
+
+	-- Create split and set buffer
+	local win = view.create_split()
+	vim.api.nvim_win_set_buf(win, buf)
+
+	return buf, win
+end
+
+---@class Response
+---@field status number
+---@field headers table<string, string>
+---@field body string
+---@field raw string
+
+---@param headers table<string, string>
+---@return string
+function M.format_response_headers(headers)
+	local formatted = {}
+	for name, value in pairs(headers) do
+		table.insert(formatted, string.format("%s: %s", name, value))
+	end
+	return table.concat(formatted, "\n")
+end
+
+function M.table_to_string(tbl)
+	local parts = {}
+	for name, value in pairs(tbl) do
+		table.insert(parts, string.format("%s=%s", name, tostring(value)))
+	end
+	return table.concat(parts, ",")
+end
+
+---@param response Response
+---@return  table
+function M.format_response(response)
+	local parts = {
+		"### Response ###",
+		string.format("Status: %d", response.status),
+		"",
+	}
+
+	-- Add headers if present
+	if next(response.headers) then
+		table.insert(parts, "Headers:")
+		table.insert(parts, "--------")
+		for name, value in pairs(response.headers) do
+			table.insert(parts, string.format("%s: %s", name, value))
+		end
+		table.insert(parts, "")
+	end
+	log.debug("Response Body", response.body, type(response.body))
+
+	if response.body then
+		table.insert(parts, "Body:")
+		table.insert(parts, "--------")
+		table.insert(parts, M.table_to_string(response.body))
+	end
+	return parts
+end
+
+function M.display_response(response)
+	-- Format response
+	local formatted_response_lines = M.format_response({
+		status = response.status,
+		headers = response.headers,
+		body = response.body,
+		raw = response.raw,
+	})
+	if not formatted_response_lines then
+		log.warn("No request data to display")
+		vim.notify("No request data to display", vim.log.levels.WARN)
+		return
+	end
+
+	-- Create buffer
+	local buf = view.create_buffer()
+
+	log.debug("Formateed", formatted_response_lines)
+
+	-- Format and set content
+	view.set_buffer_content(buf, formatted_response_lines)
 
 	-- Create split and set buffer
 	local win = view.create_split()

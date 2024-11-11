@@ -10,6 +10,21 @@ function M.setup()
 		desc = "Parse HTTP request at cursor position",
 	})
 
+	vim.api.nvim_create_user_command("KushoCreateTests", function()
+		api.process_api_request()
+	end, {
+		desc = "Show Kusho version",
+	})
+
+	vim.api.nvim_create_user_command("KushoOpenLatest", function()
+		require("kusho.utils").open_latest_test_cases()
+	end, {})
+
+	vim.api.nvim_create_user_command("KushoRunRequest", function()
+		api.run_current_request()
+	end, {})
+	-- Logs and utility commands.
+	--
 	-- Command to view logs
 	vim.api.nvim_create_user_command("KushoShowLogs", function()
 		utils.show_logs()
@@ -30,16 +45,6 @@ function M.setup()
 	end, {
 		desc = "Show Kusho version",
 	})
-
-	vim.api.nvim_create_user_command("KushoCreateTests", function()
-		api.process_api_request()
-	end, {
-		desc = "Show Kusho version",
-	})
-
-	vim.api.nvim_create_user_command("KushoOpenLatest", function()
-		require("kusho.utils").open_latest_test_cases()
-	end, {})
 end
 
 return M
