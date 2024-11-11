@@ -1,0 +1,29 @@
+# GET request
+GET https://jsonplaceholder.typicode.com/posts
+
+###
+
+# POST request
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+  "title": "foo",
+  "body": "bar",
+  "userId": 1
+}
+
+###
+
+# PUT request
+PUT https://jsonplaceholder.typicode.com/posts/1
+Content-Type: application/json
+
+{
+  "id": 1,
+  "title": "foo",
+  "body": "bar updated",
+  "userId": 1
+}
+
+###
