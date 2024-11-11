@@ -113,4 +113,39 @@ function M.get_api_request_at_cursor()
 	return result
 end
 
+local function trim(s)
+	return s:match("^%s*(.-)%s*$")
+end
+
+function M.parse_http_request(request_str)
+	if not request_str or request_str == "" then
+		return nil
+	end
+
+	local result = {
+		method = nil,
+		url = nil,
+		headers = {},
+		body = nil,
+	}
+
+	-- Split into request line and body
+	local request_line, body = request_str:match("^([^\n]+)\n\n(.+)$")
+	if not request_line then
+		return nil
+	end
+
+	-- Parse request line
+	local method, url = request_line:match("^(%S+)%s+(%S+)")
+	if not method or not url then
+		return nil
+	end
+
+	result.method = method
+	result.url = url
+	result.body = trim(body)
+
+	return result
+end
+
 return M

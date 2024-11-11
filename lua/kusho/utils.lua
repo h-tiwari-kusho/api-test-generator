@@ -167,6 +167,7 @@ end
 function M.get_all_original_requests()
 	local results = {}
 
+	local test_table = {}
 	local test_files = get_test_directories(config.options.api.save_directory)
 
 	for _, file_path in ipairs(test_files) do
@@ -175,10 +176,12 @@ function M.get_all_original_requests()
 			-- Use the parent directory name as the key
 			local parent_dir = vim.fn.fnamemodify(file_path, ":h:t")
 			results[parent_dir] = request
+			test_table[parent_dir] = vim.inspect(parser.parse_http_request(request))
 		end
 	end
 
-	log.debug("ALLDIRS", vim.inspect(results))
+	log.debug("TEST_TABLE", test_table)
+
 	return results
 end
 
