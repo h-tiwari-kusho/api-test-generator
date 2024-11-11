@@ -31,6 +31,11 @@ function M.setup(opts)
 
 	require("kusho.utils").ensure_directory(config.options.api.save_directory)
 
+	local ok, telescope = pcall(require, "telescope")
+	if ok then
+		telescope.load_extension("kusho")
+	end
+
 	log.info("Kusho plugin initialized")
 end
 
