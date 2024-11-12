@@ -35,7 +35,7 @@ function M.setup(opts)
 
 	require("telescope").load_extension("kusho")
 
-	log.info("Kusho plugin initialized")
+	log.debug("Kusho plugin initialized")
 end
 
 -- Export the log object so it can be used in other modules
