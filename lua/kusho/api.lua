@@ -421,7 +421,14 @@ function M.process_api_request()
 					log.info("Streaming completed", { total_cases = test_case_count })
 					update_status(string.format("Generation completed. %d test cases generated.", test_case_count))
 					timer:stop()
-					file_handle:close()
+					if file_handle then
+						file_handle:close()
+						file_handle = nil
+					end
+					if curl_handle then
+						curl_handle:close()
+						curl_handle = nil
+					end
 					os.remove(response_file)
 					return
 				end
@@ -435,7 +442,14 @@ function M.process_api_request()
 						"Error: You have reached the limit of 5 test suites. Please use the KushoAI web app for more."
 					)
 					timer:stop()
-					file_handle:close()
+					if file_handle then
+						file_handle:close()
+						file_handle = nil
+					end
+					if curl_handle then
+						curl_handle:close()
+						curl_handle = nil
+					end
 					os.remove(response_file)
 					return
 				end
@@ -488,20 +502,20 @@ function M.process_api_request()
 			end
 
 			-- Check if curl process has ended
-			local status = nil
-			if curl_handle then
-				status = curl_handle:close()
-			end
-			if not status then
+			local status = curl_handle and curl_handle:close()
+			if curl_handle and not status then
 				log.error("Curl process failed")
 				update_status("Error: Streaming request failed")
 				timer:stop()
 				if file_handle then
 					file_handle:close()
+					file_handle = nil
 				end
+				curl_handle = nil
 				os.remove(response_file)
 				return
 			end
+			curl_handle = nil
 		end)
 	)
 end
