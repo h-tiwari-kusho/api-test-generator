@@ -1,4 +1,3 @@
--- lua/kusho/config.lua
 local M = {}
 
 local default_config = {

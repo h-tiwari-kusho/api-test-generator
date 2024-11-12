@@ -1,4 +1,3 @@
--- lua/kusho/api.luaapi
 local M = {}
 local config = require("kusho.config")
 local parser = require("kusho.parser")
