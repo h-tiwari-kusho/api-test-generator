@@ -43,22 +43,21 @@ local function get_system_info()
 	return info
 end
 
--- Generate a hash from a string using bit32 library
+-- Simple string hashing function that doesn't require bit operations
 local function hash_string(str)
-	local hash = 5381
+	local hash = 0
 	for i = 1, #str do
-		-- Equivalent to ((hash * 32) + hash) + byte
 		hash = (hash * 223 + str:byte(i)) % 4294967291 -- Use a prime number close to 2^32
 	end
 	return string.format("%08x", hash)
 end
 
--- Combine multiple hashes
+-- Combine multiple strings for hashing
 local function combine_hashes(...)
 	local combined = ""
-	for _, hash in ipairs({ ... }) do
-		if hash then
-			combined = combined .. hash
+	for _, value in ipairs({ ... }) do
+		if value then
+			combined = combined .. tostring(value)
 		end
 	end
 	return hash_string(combined)
@@ -94,8 +93,8 @@ function M.get_machine_id()
 		tostring(os.time()), -- Add timestamp to ensure uniqueness
 	}
 
-	-- Create combined hash
-	local machine_id = combine_hashes(table.unpack(components))
+	-- Create combined hash using unpack instead of table.unpack
+	local machine_id = combine_hashes(unpack(components))
 
 	-- Store the machine ID
 	f = io.open(id_file, "w")
