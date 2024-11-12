@@ -1,11 +1,9 @@
 -- lua/kusho/api.luaapi
 local M = {}
-local curl = require("plenary.curl")
 local config = require("kusho.config")
 local parser = require("kusho.parser")
 local ui = require("kusho.ui")
 local utils = require("kusho.utils")
-local Job = require("plenary.job")
 local log = require("kusho").log
 
 ---@class HttpRequest
@@ -490,7 +488,10 @@ function M.process_api_request()
 			end
 
 			-- Check if curl process has ended
-			local status = curl_handle:close()
+			local status = nil
+			if curl_handle then
+				status = curl_handle:close()
+			end
 			if not status then
 				log.error("Curl process failed")
 				update_status("Error: Streaming request failed")
