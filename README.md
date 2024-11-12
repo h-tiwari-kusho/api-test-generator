@@ -1,11 +1,11 @@
 # Kusho
 
-A Neovim plugin for HTTP request management, test case generation, and API testing with Telescope integration.
+A Neovim plugin for HTTP request management, test generation, and API testing with Telescope integration.
 
 ## Features
 
 - 🚀 Parse and execute HTTP requests directly from your editor
-- 🧪 Automatic test case generation for API endpoints
+- 🧪 Automatic test generation for API endpoints
 - 🔍 Telescope integration for browsing test suites
 - 📝 Detailed request/response logging
 - 💻 Interactive status window for request processing
@@ -137,7 +137,7 @@ vim.keymap.set('n', '<leader>sg', builtin.live_grep, { desc = '[S]earch by [G]re
 | Command | Description |
 |---------|-------------|
 | `:ParseHttpRequest` | Parse HTTP request at cursor position |
-| `:KushoCreateTests` | Generate test cases for current request |
+| `:KushoCreateTests` | Generate tests for current request |
 | `:KushoRunRequest` | Execute the HTTP request at cursor position |
 | `:KushoLogRequests` | Show all stored requests |
 | `:KushoShowLogs` | Display plugin logs |
@@ -174,9 +174,9 @@ Authorization: Bearer your-token
 }
 ```
 
-## Test Case Generation
+## Test Generation
 
-When generating test cases, Kusho creates a structured directory for each request:
+When generating tests, Kusho creates a structured directory for each request:
 
 ```
 ~/.local/share/nvim/kusho/test-suites/
@@ -185,9 +185,9 @@ When generating test cases, Kusho creates a structured directory for each reques
     └── response.tmp
 ```
 
-Generated test cases include:
+Generated tests include:
 - Original request
-- Test case metadata (description, categories, types)
+- Test metadata (description, categories, types)
 - Modified requests for different scenarios
 
 ## API Response Display
@@ -224,7 +224,7 @@ MIT License
    - Verify the API endpoint is accessible
    - Review the logs using `:KushoShowLogs`
 
-3. **Test case generation fails**
+3. **Test generation fails**
    - Ensure you have write permissions to the save directory
    - Check the connection to the test generation service
    - Review the status window for error messages
