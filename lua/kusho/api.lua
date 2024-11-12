@@ -417,7 +417,7 @@ function M.process_api_request()
 			while chunk do
 				log.debug("Received line", { line = chunk })
 
-				if chunk == "event:done" then
+				if chunk == "event:done" or chunk == "[DONE]" then
 					log.info("Streaming completed", { total_cases = test_case_count })
 					update_status(string.format("Generation completed. %d test cases generated.", test_case_count))
 					timer:stop()
