@@ -435,10 +435,10 @@ function M.process_api_request()
 				if chunk:match("event:limit_error") then
 					log.warn("Test suite limit reached")
 					update_status(
-						"Error: You have reached the limit of 5 test suites. Please use the KushoAI web app for more."
+						"Error: You have reached the limit of 5 test suites. Please use the KushoAI web app for more. https://kusho.ai/"
 					)
 					vim.notify(
-						"Error: You have reached the limit of 5 test suites. Please use the KushoAI web app for more."
+						"Error: You have reached the limit of 5 test suites. Please use the KushoAI web app for more. https://kusho.ai/"
 					)
 					timer:stop()
 					if file_handle then
