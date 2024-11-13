@@ -383,7 +383,7 @@ function M.process_api_request()
 
 	-- Start curl process writing to temp file
 	local curl_cmd = string.format(
-		"curl --silent --show-error --fail -N -X POST %s -H 'Content-Type: application/json' -d '%s' > %s",
+		"curl --silent --show-error --fail -N -X POST %s -H 'Content-Type: application/json'  -H 'X-KUSHO-SOURCE: nvim' -d '%s' > %s",
 		STREAMING_API_ENDPOINT,
 		json_payload:gsub("'", "'\\''"), -- Escape single quotes for shell
 		response_file
