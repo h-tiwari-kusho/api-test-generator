@@ -25,8 +25,271 @@ local log = require("kusho").log
 
 -- Constants
 local STREAMING_API_ENDPOINT = "https://be.kusho.ai/vscode/generate/streaming"
+local LOG_API_ENDPOINT = "https://be.kusho.ai/events/log"
 -- "http://localhost:8080/vscode/generate/streaming"
 -- local MACHINE_ID = "12412534"
+
+-- Error handling utility functions
+local function try(f, ...)
+	local status, error = pcall(f, ...)
+	if not status then
+		return nil, error
+	end
+	return error -- On success, pcall returns true and the function's return value
+end
+
+---@class ApiResponse
+---@field status number The HTTP status code
+---@field headers table<string, string> Parsed response headers
+---@field body table|string The parsed response body (JSON decoded if possible)
+---@field raw_body string The raw response body before parsing
+---@field raw_headers string The raw headers string
+
+---Parse HTTP headers string into a table
+---@param headers_str string
+---@return table<string, string>
+local function parse_headers(headers_str)
+	local headers = {}
+	local header_lines = vim.split(headers_str, "\r?\n")
+	-- Skip the first line as it's the status line
+	for i = 2, #header_lines do
+		local line = header_lines[i]
+		if line ~= "" then
+			local name, value = line:match("^([^:]+):%s*(.+)$")
+			if name and value then
+				-- Convert header names to lowercase for consistency
+				headers[name:lower()] = value
+			end
+		end
+	end
+	return headers
+end
+-- Example of protected API request with error handling
+function M.make_safe_api_request(method, url, body, headers)
+	local success, response = pcall(function()
+		-- Prepare headers
+		local default_headers = { ["Content-Type"] = "application/json" }
+		if config.options.api.auth_token then
+			default_headers["Authorization"] = "Bearer " .. config.options.api.auth_token
+		end
+		local request_headers = vim.tbl_extend("force", default_headers, headers or {})
+
+		-- Build curl command
+		local curl_cmd = {
+			"curl",
+			"-s",
+			"-i",
+			"-X",
+			method:upper(),
+			"-L",
+			"--max-redirs",
+			"5",
+		}
+
+		-- Add headers
+		for name, value in pairs(request_headers) do
+			table.insert(curl_cmd, "-H")
+			table.insert(curl_cmd, string.format("%s: %s", name, value))
+		end
+
+		-- Add body if present
+		if body then
+			table.insert(curl_cmd, "-d")
+			if type(body) == "table" then
+				local ok, encoded = pcall(vim.json.encode, body)
+				if not ok then
+					error("Failed to encode JSON body: " .. encoded)
+				end
+				table.insert(curl_cmd, encoded)
+			else
+				table.insert(curl_cmd, tostring(body))
+			end
+		end
+
+		-- Add URL
+		table.insert(curl_cmd, url)
+
+		-- Log request
+		log.debug("Making API request", {
+			method = method,
+			url = url,
+			curl_cmd = table.concat(curl_cmd, " "),
+		})
+
+		-- Execute curl command with error handling
+		local output = vim.fn.system(curl_cmd)
+		if vim.v.shell_error ~= 0 then
+			error({
+				type = "curl_error",
+				message = "Curl command failed",
+				output = output,
+				curl_cmd = table.concat(curl_cmd, " "),
+			})
+		end
+
+		-- Parse response with error handling
+		local headers_body = vim.split(output, "\r\n\r\n")
+		if #headers_body < 2 then
+			headers_body = vim.split(output, "\n\n")
+		end
+		if #headers_body < 2 then
+			error({
+				type = "parse_error",
+				message = "Invalid response format",
+				output = output,
+			})
+		end
+
+		-- Parse status and headers
+		local status = M.parse_http_response_status(output)
+		local headers_parsed = parse_headers(headers_body[1])
+		local raw_body = headers_body[2]
+
+		-- Handle HTTP errors
+		if status >= 400 then
+			error({
+				type = "http_error",
+				status = status,
+				message = "HTTP request failed",
+				body = raw_body,
+			})
+		end
+
+		-- Parse JSON response
+		local parsed_body = raw_body
+		local json_ok, result = pcall(vim.json.decode, raw_body)
+		if json_ok then
+			parsed_body = result
+		end
+
+		return {
+			status = status,
+			headers = headers_parsed,
+			body = parsed_body,
+			raw_body = raw_body,
+			raw_headers = headers_body[1],
+		}
+	end)
+
+	if not success then
+		-- Handle different types of errors
+		if type(response) == "table" and response.type then
+			local error_handlers = {
+				curl_error = function(err)
+					log.error("Curl error", err)
+					return nil, string.format("Curl error: %s", err.output)
+				end,
+				parse_error = function(err)
+					log.error("Parse error", err)
+					return nil, string.format("Failed to parse response: %s", err.message)
+				end,
+				http_error = function(err)
+					log.error("HTTP error", err)
+					return nil, string.format("HTTP %d error: %s", err.status, err.body)
+				end,
+			}
+
+			local handler = error_handlers[response.type]
+			if handler then
+				return handler(response)
+			end
+		end
+
+		-- Generic error handling
+		log.error("API request failed", { error = response })
+		return nil, string.format("API request failed: %s", response)
+	end
+
+	return response
+end
+
+-- Example usage of safe API request
+function M.run_safe_request()
+	local request = parser.get_api_request_at_cursor()
+	if not request then
+		return nil, "No API request found at cursor position"
+	end
+
+	-- Prepare request parameters
+	local headers = request.headers or {}
+	if request.json_body then
+		headers["Content-Type"] = "application/json"
+	end
+
+	local body
+	if request.json_body or request.body then
+		local ok, encoded = pcall(function()
+			if request.json_body then
+				return vim.json.encode(request.json_body)
+			elseif type(request.body) == "table" then
+				return vim.json.encode(request.body)
+			else
+				return request.body
+			end
+		end)
+
+		if not ok then
+			return nil, "Failed to encode request body: " .. encoded
+		end
+		body = encoded
+	end
+
+	-- Make the request with error handling
+	local response, err = M.make_safe_api_request(request.method, request.url, body, headers)
+
+	if err then
+		vim.notify("Request failed: " .. err, vim.log.levels.ERROR)
+		return nil, err
+	end
+
+	-- Display response
+	local output_buffer = ui.display_response(response)
+	return output_buffer
+end
+
+-- Example of error handling in parallel requests
+function M.run_parallel_safe_requests(requests)
+	local tasks = {}
+	local results = {}
+
+	for i, request in ipairs(requests) do
+		tasks[i] = coroutine.create(function()
+			local response, err = M.make_safe_api_request(request.method, request.url, request.body, request.headers)
+
+			if err then
+				return { success = false, error = err }
+			end
+
+			return { success = true, response = response }
+		end)
+	end
+
+	local running = #tasks
+	while running > 0 do
+		for i, task in ipairs(tasks) do
+			if task and coroutine.status(task) ~= "dead" then
+				local success, result = coroutine.resume(task)
+				if not success then
+					-- Coroutine error
+					results[i] = {
+						success = false,
+						error = "Task failed: " .. tostring(result),
+					}
+					tasks[i] = nil
+					running = running - 1
+				elseif result then
+					-- Task completed
+					results[i] = result
+					tasks[i] = nil
+					running = running - 1
+				end
+			end
+		end
+		coroutine.yield()
+	end
+
+	return results
+end
 
 -- HTTP Utilities
 ---@param request HttpRequest
@@ -188,33 +451,6 @@ function M.parse_http_response_status(raw_response)
 	return tonumber(status)
 end
 
----@class ApiResponse
----@field status number The HTTP status code
----@field headers table<string, string> Parsed response headers
----@field body table|string The parsed response body (JSON decoded if possible)
----@field raw_body string The raw response body before parsing
----@field raw_headers string The raw headers string
-
----Parse HTTP headers string into a table
----@param headers_str string
----@return table<string, string>
-local function parse_headers(headers_str)
-	local headers = {}
-	local header_lines = vim.split(headers_str, "\r?\n")
-	-- Skip the first line as it's the status line
-	for i = 2, #header_lines do
-		local line = header_lines[i]
-		if line ~= "" then
-			local name, value = line:match("^([^:]+):%s*(.+)$")
-			if name and value then
-				-- Convert header names to lowercase for consistency
-				headers[name:lower()] = value
-			end
-		end
-	end
-	return headers
-end
-
 ---@param method string
 ---@param url string
 ---@param body table|string|nil
@@ -223,8 +459,8 @@ end
 function M.make_api_request(method, url, body, headers)
 	-- Prepare headers
 	local default_headers = { ["Content-Type"] = "application/json" }
-	if config.options.auth_token then
-		default_headers["Authorization"] = "Bearer " .. config.options.auth_token
+	if config.options.api.auth_token then
+		default_headers["Authorization"] = "Bearer " .. config.options.api.auth_token
 	end
 	local request_headers = vim.tbl_extend("force", default_headers, headers or {})
 
@@ -555,18 +791,26 @@ function M.run_current_request()
 	})
 
 	-- Execute request
-	local response = M.make_api_request(request.method, request.url, request.body, request.headers)
-	-- {
-	-- 	url = request.url,
-	-- 	body = body,
-	-- 	headers = headers,
-	-- 	raw = true, -- Get raw response for headers
-	-- })
+	-- local response = M.make_api_request(request.method, request.url, request.body, request.headers)
+
+	local responses = M.run_parallel_safe_requests({
+		request,
+		{
+			method = "POST",
+			url = LOG_API_ENDPOINT,
+			body = {
+				name = "nvim-run-log",
+				data = {
+					request,
+				},
+			},
+		},
+	})
 
 	-- Display response in new buffer
-	log.debug("FINAL RESPONSE", { response = response })
+	log.debug("FINAL RESPONSE", { response = responses[1] })
 
-	local output_buffer = ui.display_response(response)
+	local output_buffer = ui.display_response(responses[1])
 
 	return output_buffer
 end
