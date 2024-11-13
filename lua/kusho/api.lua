@@ -64,232 +64,6 @@ local function parse_headers(headers_str)
 	end
 	return headers
 end
--- Example of protected API request with error handling
-function M.make_safe_api_request(method, url, body, headers)
-	local success, response = pcall(function()
-		-- Prepare headers
-		local default_headers = { ["Content-Type"] = "application/json" }
-		if config.options.api.auth_token then
-			default_headers["Authorization"] = "Bearer " .. config.options.api.auth_token
-		end
-		local request_headers = vim.tbl_extend("force", default_headers, headers or {})
-
-		-- Build curl command
-		local curl_cmd = {
-			"curl",
-			"-s",
-			"-i",
-			"-X",
-			method:upper(),
-			"-L",
-			"--max-redirs",
-			"5",
-		}
-
-		-- Add headers
-		for name, value in pairs(request_headers) do
-			table.insert(curl_cmd, "-H")
-			table.insert(curl_cmd, string.format("%s: %s", name, value))
-		end
-
-		-- Add body if present
-		if body then
-			table.insert(curl_cmd, "-d")
-			if type(body) == "table" then
-				local ok, encoded = pcall(vim.json.encode, body)
-				if not ok then
-					error("Failed to encode JSON body: " .. encoded)
-				end
-				table.insert(curl_cmd, encoded)
-			else
-				table.insert(curl_cmd, tostring(body))
-			end
-		end
-
-		-- Add URL
-		table.insert(curl_cmd, url)
-
-		-- Log request
-		log.debug("Making API request", {
-			method = method,
-			url = url,
-			curl_cmd = table.concat(curl_cmd, " "),
-		})
-
-		-- Execute curl command with error handling
-		local output = vim.fn.system(curl_cmd)
-		if vim.v.shell_error ~= 0 then
-			error({
-				type = "curl_error",
-				message = "Curl command failed",
-				output = output,
-				curl_cmd = table.concat(curl_cmd, " "),
-			})
-		end
-
-		-- Parse response with error handling
-		local headers_body = vim.split(output, "\r\n\r\n")
-		if #headers_body < 2 then
-			headers_body = vim.split(output, "\n\n")
-		end
-		if #headers_body < 2 then
-			error({
-				type = "parse_error",
-				message = "Invalid response format",
-				output = output,
-			})
-		end
-
-		-- Parse status and headers
-		local status = M.parse_http_response_status(output)
-		local headers_parsed = parse_headers(headers_body[1])
-		local raw_body = headers_body[2]
-
-		-- Handle HTTP errors
-		if status >= 400 then
-			error({
-				type = "http_error",
-				status = status,
-				message = "HTTP request failed",
-				body = raw_body,
-			})
-		end
-
-		-- Parse JSON response
-		local parsed_body = raw_body
-		local json_ok, result = pcall(vim.json.decode, raw_body)
-		if json_ok then
-			parsed_body = result
-		end
-
-		return {
-			status = status,
-			headers = headers_parsed,
-			body = parsed_body,
-			raw_body = raw_body,
-			raw_headers = headers_body[1],
-		}
-	end)
-
-	if not success then
-		-- Handle different types of errors
-		if type(response) == "table" and response.type then
-			local error_handlers = {
-				curl_error = function(err)
-					log.error("Curl error", err)
-					return nil, string.format("Curl error: %s", err.output)
-				end,
-				parse_error = function(err)
-					log.error("Parse error", err)
-					return nil, string.format("Failed to parse response: %s", err.message)
-				end,
-				http_error = function(err)
-					log.error("HTTP error", err)
-					return nil, string.format("HTTP %d error: %s", err.status, err.body)
-				end,
-			}
-
-			local handler = error_handlers[response.type]
-			if handler then
-				return handler(response)
-			end
-		end
-
-		-- Generic error handling
-		log.error("API request failed", { error = response })
-		return nil, string.format("API request failed: %s", response)
-	end
-
-	return response
-end
-
--- Example usage of safe API request
-function M.run_safe_request()
-	local request = parser.get_api_request_at_cursor()
-	if not request then
-		return nil, "No API request found at cursor position"
-	end
-
-	-- Prepare request parameters
-	local headers = request.headers or {}
-	if request.json_body then
-		headers["Content-Type"] = "application/json"
-	end
-
-	local body
-	if request.json_body or request.body then
-		local ok, encoded = pcall(function()
-			if request.json_body then
-				return vim.json.encode(request.json_body)
-			elseif type(request.body) == "table" then
-				return vim.json.encode(request.body)
-			else
-				return request.body
-			end
-		end)
-
-		if not ok then
-			return nil, "Failed to encode request body: " .. encoded
-		end
-		body = encoded
-	end
-
-	-- Make the request with error handling
-	local response, err = M.make_safe_api_request(request.method, request.url, body, headers)
-
-	if err then
-		vim.notify("Request failed: " .. err, vim.log.levels.ERROR)
-		return nil, err
-	end
-
-	-- Display response
-	local output_buffer = ui.display_response(response)
-	return output_buffer
-end
-
--- Example of error handling in parallel requests
-function M.run_parallel_safe_requests(requests)
-	local tasks = {}
-	local results = {}
-
-	for i, request in ipairs(requests) do
-		tasks[i] = coroutine.create(function()
-			local response, err = M.make_safe_api_request(request.method, request.url, request.body, request.headers)
-
-			if err then
-				return { success = false, error = err }
-			end
-
-			return { success = true, response = response }
-		end)
-	end
-
-	local running = #tasks
-	while running > 0 do
-		for i, task in ipairs(tasks) do
-			if task and coroutine.status(task) ~= "dead" then
-				local success, result = coroutine.resume(task)
-				if not success then
-					-- Coroutine error
-					results[i] = {
-						success = false,
-						error = "Task failed: " .. tostring(result),
-					}
-					tasks[i] = nil
-					running = running - 1
-				elseif result then
-					-- Task completed
-					results[i] = result
-					tasks[i] = nil
-					running = running - 1
-				end
-			end
-		end
-		coroutine.yield()
-	end
-
-	return results
-end
 
 -- HTTP Utilities
 ---@param request HttpRequest
@@ -754,15 +528,16 @@ function M.process_api_request()
 		end)
 	)
 end
+local async = require("plenary.async")
 
-function M.run_current_request()
-	-- Get request at cursor
-	local request = parser.get_api_request_at_cursor()
-	if not request then
-		vim.notify("No API request found at cursor position", vim.log.levels.ERROR)
-		return
-	end
+-- Constants remain the same
+-- local STREAMING_API_ENDPOINT = "https://be.kusho.ai/vscode/generate/streaming"
+-- local LOG_API_ENDPOINT = "https://be.kusho.ai/events/log"
 
+-- Async wrapper for make_api_request
+---@param request HttpRequest
+---@param callback function
+local function async_request(request, callback)
 	-- Prepare headers
 	local headers = request.headers or {}
 	if request.json_body then
@@ -781,19 +556,50 @@ function M.run_current_request()
 		end
 	end
 
-	-- Log request details
-	log.debug("Executing request", {
-		method = request.method,
-		url = request.url,
-		headers = headers,
-		body = body,
-		raw = vim.inspect(request),
-	})
-
 	-- Execute request
-	-- local response = M.make_api_request(request.method, request.url, request.body, request.headers)
+	local ok, result = pcall(M.make_api_request, request.method, request.url, body, headers)
+	if not ok then
+		callback({ success = false, error = result })
+	else
+		callback({ success = true, response = result })
+	end
+end
 
-	local responses = M.run_parallel_safe_requests({
+-- Run multiple requests in parallel
+---@param requests HttpRequest[]
+---@param callback function
+function M.run_parallel_requests(requests, callback)
+	local pending = #requests
+	local results = {}
+
+	for i, request in ipairs(requests) do
+		async.run(function(cb)
+			async_request(request, function(result)
+				results[i] = result
+				pending = pending - 1
+
+				if pending == 0 then
+					cb(results)
+				end
+			end)
+		end, callback)
+	end
+end
+
+-- Update run_current_request to use proper async
+function M.run_current_request()
+	local request = parser.get_api_request_at_cursor()
+	if not request then
+		vim.notify("No API request found at cursor position", vim.log.levels.ERROR)
+		return
+	end
+
+	-- Create status window
+	local status_window = ui.create_status_window()
+	status_window.update("Running requests...")
+
+	-- Run main request and logging request in parallel
+	M.run_parallel_requests({
 		request,
 		{
 			method = "POST",
@@ -805,14 +611,85 @@ function M.run_current_request()
 				},
 			},
 		},
-	})
+	}, function(responses)
+		vim.schedule(function()
+			status_window.close()
 
-	-- Display response in new buffer
-	log.debug("FINAL RESPONSE", { response = responses[1] })
+			-- Check main request result
+			local main_response = responses[1]
+			if not main_response.success then
+				vim.notify("Request failed: " .. main_response.error, vim.log.levels.ERROR)
+				return
+			end
 
-	local output_buffer = ui.display_response(responses[1])
+			-- Log responses
+			log.debug("FINAL RESPONSE", { response = main_response.response })
 
-	return output_buffer
+			-- Display response in new buffer
+			local output_buffer = ui.display_response(main_response.response)
+			-- return output_buffer
+		end)
+	end)
 end
+
+-- function M.run_current_request()
+-- 	-- Get request at cursor
+-- 	local request = parser.get_api_request_at_cursor()
+-- 	if not request then
+-- 		vim.notify("No API request found at cursor position", vim.log.levels.ERROR)
+-- 		return
+-- 	end
+--
+-- 	-- Prepare headers
+-- 	local headers = request.headers or {}
+-- 	if request.json_body then
+-- 		headers["Content-Type"] = "application/json"
+-- 	end
+--
+-- 	-- Prepare body
+-- 	local body
+-- 	if request.json_body then
+-- 		body = vim.json.encode(request.json_body)
+-- 	elseif request.body then
+-- 		if type(request.body) == "table" then
+-- 			body = vim.json.encode(request.body)
+-- 		else
+-- 			body = request.body
+-- 		end
+-- 	end
+--
+-- 	-- Log request details
+-- 	log.debug("Executing request", {
+-- 		method = request.method,
+-- 		url = request.url,
+-- 		headers = headers,
+-- 		body = body,
+-- 		raw = vim.inspect(request),
+-- 	})
+--
+-- 	-- Execute request
+-- 	local response = M.make_api_request(request.method, request.url, request.body, request.headers)
+--
+-- 	local responses = M.run_parallel_safe_requests({
+-- 		request,
+-- 		{
+-- 			method = "POST",
+-- 			url = LOG_API_ENDPOINT,
+-- 			body = {
+-- 				name = "nvim-run-log",
+-- 				data = {
+-- 					request,
+-- 				},
+-- 			},
+-- 		},
+-- 	})
+--
+-- 	-- Display response in new buffer
+-- 	log.debug("FINAL RESPONSE", { response = responses[1] })
+--
+-- 	local output_buffer = ui.display_response(response)
+--
+-- 	return output_buffer
+-- end
 
 return M
