@@ -530,6 +530,7 @@ function M.process_api_request()
 end
 
 local async = require("plenary.async")
+local a = require("plenary.async.util")
 
 -- -- Constants
 -- local STREAMING_API_ENDPOINT = "https://be.kusho.ai/vscode/generate/streaming"
@@ -600,10 +601,15 @@ M.run_current_request = async.void(function()
 		},
 	}
 
-	local results = await(wrapped_parallel_requests(requests))
+	local ok, results = pcall(a.async_call, wrapped_parallel_requests, requests)
 
 	vim.schedule(function()
 		status_window.close()
+
+		if not ok then
+			vim.notify("Request failed: " .. tostring(results), vim.log.levels.ERROR)
+			return
+		end
 
 		local main_response = results[1]
 		if not main_response.success then
