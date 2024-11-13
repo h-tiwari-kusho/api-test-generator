@@ -528,109 +528,94 @@ function M.process_api_request()
 		end)
 	)
 end
+
 local async = require("plenary.async")
 
--- Constants remain the same
+-- -- Constants
 -- local STREAMING_API_ENDPOINT = "https://be.kusho.ai/vscode/generate/streaming"
 -- local LOG_API_ENDPOINT = "https://be.kusho.ai/events/log"
 
--- Async wrapper for make_api_request
----@param request HttpRequest
+-- Wrap make_api_request to be async-friendly
+---@param method string
+---@param url string
+---@param body any
+---@param headers table
 ---@param callback function
-local function async_request(request, callback)
-	-- Prepare headers
-	local headers = request.headers or {}
-	if request.json_body then
-		headers["Content-Type"] = "application/json"
-	end
-
-	-- Prepare body
-	local body
-	if request.json_body then
-		body = vim.json.encode(request.json_body)
-	elseif request.body then
-		if type(request.body) == "table" then
-			body = vim.json.encode(request.body)
-		else
-			body = request.body
-		end
-	end
-
-	-- Execute request
-	local ok, result = pcall(M.make_api_request, request.method, request.url, body, headers)
-	if not ok then
-		callback({ success = false, error = result })
-	else
-		callback({ success = true, response = result })
-	end
+local function async_make_request(method, url, body, headers, callback)
+	vim.schedule(function()
+		local ok, result = pcall(M.make_api_request, method, url, body, headers)
+		callback(ok, result)
+	end)
 end
 
+-- Create wrapped version
+local wrapped_make_request = async.wrap(async_make_request, 5)
+
 -- Run multiple requests in parallel
----@param requests HttpRequest[]
+---@param requests table
 ---@param callback function
-function M.run_parallel_requests(requests, callback)
-	local pending = #requests
+local function run_parallel_requests(requests, callback)
+	local count = #requests
 	local results = {}
 
 	for i, request in ipairs(requests) do
-		async.run(function(cb)
-			async_request(request, function(result)
-				results[i] = result
-				pending = pending - 1
+		async_make_request(request.method, request.url, request.body, request.headers, function(ok, result)
+			if ok then
+				results[i] = { success = true, response = result }
+			else
+				results[i] = { success = false, error = result }
+			end
 
-				if pending == 0 then
-					cb(results)
-				end
-			end)
-		end, callback)
+			count = count - 1
+			if count == 0 then
+				callback(results)
+			end
+		end)
 	end
 end
 
--- Update run_current_request to use proper async
-function M.run_current_request()
+-- Wrapped version of parallel requests
+local wrapped_parallel_requests = async.wrap(run_parallel_requests, 2)
+
+-- Update run_current_request to use the wrapped functions
+M.run_current_request = async.void(function()
 	local request = parser.get_api_request_at_cursor()
 	if not request then
 		vim.notify("No API request found at cursor position", vim.log.levels.ERROR)
 		return
 	end
 
-	-- Create status window
 	local status_window = ui.create_status_window()
 	status_window.update("Running requests...")
 
-	-- Run main request and logging request in parallel
-	M.run_parallel_requests({
+	local requests = {
 		request,
 		{
 			method = "POST",
 			url = LOG_API_ENDPOINT,
 			body = {
 				name = "nvim-run-log",
-				data = {
-					request,
-				},
+				data = { request },
 			},
 		},
-	}, function(responses)
-		vim.schedule(function()
-			status_window.close()
+	}
 
-			-- Check main request result
-			local main_response = responses[1]
-			if not main_response.success then
-				vim.notify("Request failed: " .. main_response.error, vim.log.levels.ERROR)
-				return
-			end
+	local results = await(wrapped_parallel_requests(requests))
 
-			-- Log responses
-			log.debug("FINAL RESPONSE", { response = main_response.response })
+	vim.schedule(function()
+		status_window.close()
 
-			-- Display response in new buffer
-			local output_buffer = ui.display_response(main_response.response)
-			-- return output_buffer
-		end)
+		local main_response = results[1]
+		if not main_response.success then
+			vim.notify("Request failed: " .. main_response.error, vim.log.levels.ERROR)
+			return
+		end
+
+		log.debug("FINAL RESPONSE", { response = main_response.response })
+		local output_buffer = ui.display_response(main_response.response)
+		-- return output_buffer
 	end)
-end
+end)
 
 -- function M.run_current_request()
 -- 	-- Get request at cursor
