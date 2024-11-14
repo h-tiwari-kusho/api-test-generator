@@ -1,5 +1,9 @@
 # Kusho
 
+<a href="https://dotfyle.com/plugins/h-tiwari-kusho/api-test-generator">
+  <img src="https://dotfyle.com/plugins/h-tiwari-kusho/api-test-generator/shield" />
+</a>
+
 A Neovim plugin for HTTP request management, test generation, and API testing with Telescope integration.
 
 ## Features
