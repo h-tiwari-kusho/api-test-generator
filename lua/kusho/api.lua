@@ -24,7 +24,8 @@ local log = require("kusho").log
 ---@field modify_key_values table
 
 -- Constants
-local STREAMING_API_ENDPOINT = "https://be.kusho.ai/vscode/generate/streaming"
+local STREAMING_API_ENDPOINT = "http://localhost:8080/vscode/generate/streaming"
+-- "https://be.kusho.ai/vscode/generate/streaming"
 -- "http://localhost:8080/vscode/generate/streaming"
 -- local MACHINE_ID = "12412534"
 
